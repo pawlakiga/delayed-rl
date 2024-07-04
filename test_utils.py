@@ -86,13 +86,13 @@ def test_augmented_agent(agent, env, seed = None, deterministic = False, state_e
         # Save history
         actions.append(action)
         executed_actions.append(executed_action)
-        rewards.append(reward)
-        avg_rewards.append(np.mean(rewards[-10:]))      
-
+        
+        avg_rewards.append(np.mean(rewards[-10:]))    
+    print(f"Episode reward was {episode_reward}")
     return states, actions, rewards, avg_rewards, executed_actions
 
 
-def test_agent(agent, env, seed = None, deterministic = False, state_error = False):
+def test_agent(agent, env, seed = None, deterministic = False, state_error = False, return_ep_reward = False):
 
     states = []
     rewards = []
@@ -101,7 +101,7 @@ def test_agent(agent, env, seed = None, deterministic = False, state_error = Fal
     avg_rewards = []
 
     state, done = env.reset(seed = seed)
-    print(f"Initial state was {state}")
+    # print(f"Initial state was {state}")
     episode_reward = 0
     t = 0
     # Play episode
@@ -114,8 +114,7 @@ def test_agent(agent, env, seed = None, deterministic = False, state_error = Fal
         action,_ = agent.predict(state, deterministic = deterministic)
         new_state, reward, terminated, truncated, info = env.step(action)
         executed_action = env.last_action 
-        if (terminated or truncated) : 
-            break
+        
         reward = np.array([reward], dtype = float)    
         state = new_state
         episode_reward += reward
@@ -124,9 +123,18 @@ def test_agent(agent, env, seed = None, deterministic = False, state_error = Fal
         actions.append(action)
         executed_actions.append(executed_action)
         rewards.append(reward)
-        avg_rewards.append(np.mean(rewards[-10:]))      
+        avg_rewards.append(np.mean(rewards[-10:]))    
 
-    return states, actions, rewards, avg_rewards, executed_actions
+        if (terminated or truncated) : 
+            print(f"Final reward was {reward}")
+            break  
+    actions.append(actions[-1])
+
+    print(f"Episode reward was {episode_reward}")
+    if return_ep_reward : 
+        return states, actions, rewards, avg_rewards, executed_actions, episode_reward
+    else :
+        return states, actions, rewards, avg_rewards, executed_actions
 
 def test_different_delayed_agents(agent, 
                                   core_env, 

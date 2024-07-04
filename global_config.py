@@ -32,15 +32,15 @@ position_params = {
 robot_steer_params = {
     'm': 0.5, 
     'd': 0.5, 
-    'Ts': 0.3, 
-    'max_episode_len': 120
+    'Ts': 0.1, 
+    'max_episode_len': 200
 }
 # Spherical tank
 spherical_tank_params = {
     'cp' : 1.3,
     'radius' : 2,
     'Ts' : 0.1,
-    'max_episode_len' : 200
+    'max_episode_len' : 150
 }
 # Pendulum
 pendulum_params = {
@@ -74,11 +74,13 @@ COLORS = {
     'warm_blue' : '#5d7aff', 
     'warm_green' : '#4bc64d',
     'warm_yellow' : '#f0cc6b',
+    # 'warm_yellow' : '#e39b00',
     'warm_purple' : '#bb7aff',
     'cold_red' : '#dd405c',
     'mid_green' : '#54a048',
     'dark_pink' : '#d360a6',
     'dark_mint' : '#51ae9a',
     'dark_orange' : '#c44b0b',
+    'black' : '#000000',
 
 }

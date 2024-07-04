@@ -13,7 +13,7 @@ def predict_state(env_model, cur_state, actions_queue, delay, timestep = None):
     # env_model.reset()
     if delay == 0 or len(actions_queue) == 0: 
         return cur_state
-    
+    # print(f"Pred fun: Predicting state with action {actions_queue} and state {env_model.state} and timestep {timestep}")
     # If the augmented state is passed, we need to reshape it to the original state
     if cur_state.shape[0] > env_model.observation_space.shape[0]:
         cur_state = cur_state[:env_model.observation_space.shape[0]]
@@ -78,7 +78,7 @@ def predict_next_state(env_model, cur_state, action, timestep = None):
     return new_state
 
     
-def plot_test(env, states, rewards, actions, executed_actions, states_indexes = None):
+def plot_test(env, states, actions, rewards, avg_rewards, executed_actions, states_indexes = None):
     # Plot the results 
 
     if env.unwrapped.__class__.__name__ == 'RobotSteer' : 
@@ -172,9 +172,16 @@ def plot_multiple_tests(env, States, Actions, Rewards, delays):
 
 def get_setpoint_trajectory(setpoints, max_episode_len, steps_per_change):
     trajectory = []
+    # print(f"Max episode length {max_episode_len}")
     for step in range(0, max_episode_len):
+        # print(f"Step {step}")
         if step % steps_per_change == 0:
-            setpoint_sample = np.array(np.random.choice(setpoints))
+            # print(f"Updating at step {step} and setpoints {setpoints}")
+            idx = np.random.randint(len(setpoints))
+            setpoint_sample = copy.deepcopy(setpoints[idx])
+            # setpoint_sample = np.array(np.random.choice(setpoints))
+            # print(f"Setpoints {setpoints}, idx {idx}, setpoint {setpoint_sample}")
         trajectory.append(setpoint_sample)
+    # print(f"Trajectory {len(trajectory)}")
     return trajectory
     

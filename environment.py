@@ -24,7 +24,8 @@ class LinearVelocity(gym.Env):
                  render_mode = None, 
                  max_episode_len : int = global_config.DEFAULT_PARAMS['LinearVelocity']['max_episode_len'], 
                  seed = None,
-                 noise_std : float = 0.0) -> None:
+                 noise_std : float = 0.0,
+                 update_frequency : int = 20) -> None:
         """
         Initialisation of the environment
         :param m: mass of the object
@@ -57,12 +58,33 @@ class LinearVelocity(gym.Env):
         self.seed = seed
         np.random.seed(seed)
 
+        try : 
+            if (desired_state.shape[0] > self.start_state.shape[0]) or len(desired_state.shape) > 1:
+                self.desired_trajectory = get_setpoint_trajectory(desired_state, 
+                                                                max_episode_len, 
+                                                                steps_per_change=int(update_frequency/self.Ts)) 
+                print(f"Init: Trajectory {self.desired_trajectory}")
+            else:
+                self.desired_trajectory = None
+                self.desired_state = desired_state
+        except:
+            self.desired_trajectory = None
+            self.desired_state = desired_state
+
+        print(f"Desired trajectory {self.desired_trajectory} and desired state {self.desired_state}")
+
     def reset(self, seed = None, options = None):
         super().reset(seed=seed)
+        # self.desired_state = np.array(self.desired_state).reshape(self.start_state.shape)
         if self.start_state is None : 
             self.state = self.observation_space.sample()
         else: 
             self.state = self.start_state
+
+        if self.desired_trajectory is not None:
+            self.desired_state = self.desired_trajectory[0].reshape(self.observation_space.shape)
+
+        self.des_history = []
         self.initial_state = self.state
         self.timestep = 0
         self.last_reward = 0.0
@@ -72,6 +94,11 @@ class LinearVelocity(gym.Env):
         return self.state, ""
 
     def step(self, action: float) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
+        if self.desired_trajectory is not None:
+            # print(f"Time step {self.timestep} and desired trajectory {len(self.desired_trajectory)}")
+            self.desired_state = self.desired_trajectory[self.timestep].reshape(self.observation_space.shape)
+
+        self.des_history.append(self.desired_state)
         # Calculate new state
         new_state = self.get_new_state(action) + np.random.normal(0, self.noise_std, self.observation_space.shape)
         # print(f"Old state {self.state}, New state {new_state} and action {action}")
@@ -160,7 +187,8 @@ class Position(LinearVelocity):
                  render_mode=None, 
                  max_episode_len : int =global_config.DEFAULT_PARAMS['Position']['max_episode_len'], 
                  seed = None, 
-                 noise_std : float = 0.0): 
+                 noise_std : float = 0.0,
+                 update_frequency : int = 20): 
         """
         Initialisation of the environment
         :param m: mass of the object
@@ -173,13 +201,20 @@ class Position(LinearVelocity):
         :param seed: seed for the environment observation space
         :param noise_std: standard deviation of the noise to add to the state
         """
-        super().__init__(m,d,start_state, desired_state, Ts, render_mode, max_episode_len, seed = seed, noise_std=noise_std)    
+        super().__init__(m,d,start_state, desired_state, Ts, render_mode, max_episode_len, seed = seed, noise_std=noise_std, update_frequency=update_frequency)    
         # The action space is between -1 and 1 so that the agent can go backwards
         self.action_space = gym.spaces.Box(low = -1, high = 1, dtype = float)
         self.observation_space = gym.spaces.Box(low = np.array([-3,-3]), high = np.array([3, 3]), dtype = float)
         self.observation_space.seed(seed = seed)
         self.desired_state[0] = 0.0
+
+    def reset(self, seed = None, options = None):
+        
+        _, info = super().reset(seed = seed)
+        self.desired_state[0] = 0.0
     
+        return self.state, info
+
     def reward_fun(self, action):
         # step_reward = - np.abs([self.state[1] - self.desired_state[1]])
         velocity, position = self.state
@@ -191,8 +226,10 @@ class Position(LinearVelocity):
         # Action penalty
         r_action = -0.01 * action**2
         # State space violation
-        r_collision = -5 if self.state_space_violation() else 0
-        return r_distance + r_velocity + r_action + r_collision
+        r_collision = 0 if self.state_space_violation() else 0
+
+        r_goal = 1 if np.abs(p_desired - position) < 0.005 else 0
+        return r_distance + r_velocity + r_action + r_collision + r_goal
     
     def get_new_state(self, action): 
         self.state = self.state.reshape(self.observation_space.shape)
@@ -263,7 +300,8 @@ class RobotSteer(LinearVelocity):
                  render_mode=None,
                  max_episode_len : int = global_config.DEFAULT_PARAMS['RobotSteer']['max_episode_len'], 
                  seed = None, 
-                 noise_std : float = 0.0): 
+                 noise_std : float = 0.0,
+                 update_frequency : int = 20): 
         
 
         """
@@ -278,7 +316,7 @@ class RobotSteer(LinearVelocity):
         :param seed: seed for the environment observation space
         :param noise_std: standard deviation of the noise to add to the state
         """
-        super().__init__(m,d,start_state, desired_state, Ts, render_mode, max_episode_len, seed=seed, noise_std=noise_std)    
+        super().__init__(m,d,start_state, desired_state, Ts, render_mode, max_episode_len, seed=seed, noise_std=noise_std, update_frequency=update_frequency)    
         self.action_space = gym.spaces.Box(low = np.array([-1,-1]), high = np.array([1, 1]), dtype = float)
         # augmented_state_space = [gym.spaces.Box(low = -3, high = 3, dtype = float) , gym.spaces.Box(low = 0, high = 5, dtype = float), gym.spaces.Box(low = 0, high = 5, dtype = float)]  + augmented_actions
         self.observation_space = gym.spaces.Box(low = np.array([-3,0,0, -np.pi]), high = np.array([3,5,5, np.pi]), dtype = float)
@@ -287,6 +325,11 @@ class RobotSteer(LinearVelocity):
 
     def reset(self, seed = None,  options = None):
         _, info = super().reset(seed = seed)
+        # print(f"Desired state {self.desired_state} from trajectory {self.desired_trajectory} and start state {self.start_state}")
+        self.desired_state = np.array(self.desired_state).reshape(self.observation_space.shape)
+        self.desired_state[0] = 0.0
+        self.desired_state[3] = 0.0
+        # print(f"Desired state {self.desired_state}")
         # # Always start with zero velocity
         if self.start_state is None:
             self.state[0] = 0.0
@@ -303,7 +346,7 @@ class RobotSteer(LinearVelocity):
         r_distance = -np.sqrt((x_goal - x)**2 + (y_goal - y)**2)
 
         # Goal-reaching reward
-        r_goal = 10 if np.sqrt((x_goal - x)**2 + (y_goal - y)**2) < 0.01 else 0
+        r_goal = 1 if np.sqrt((x_goal - x)**2 + (y_goal - y)**2) < 0.01 else 0
 
         # Velocity penalty
         r_velocity = -0.01 * (velocity**2 + angular_velocity**2)
@@ -312,7 +355,7 @@ class RobotSteer(LinearVelocity):
         r_action = -0.01 * (force**2 + angular_velocity**2)
 
         # State space violation
-        r_collision = -5 if self.state_space_violation() else 0
+        r_collision = 0 if self.state_space_violation() else 0
 
         return r_distance + r_goal + r_velocity + r_action + r_collision
 
@@ -337,7 +380,7 @@ class SphericalTank(LinearVelocity):
     def __init__(self, 
                  radius = global_config.DEFAULT_PARAMS['SphericalTank']['radius'],
                  cp = global_config.DEFAULT_PARAMS['SphericalTank']['cp'],
-                 start_state : np.array =None, 
+                 start_state : np.array = None, 
                  desired_state : np.array = np.array([0.8]), 
                  Ts : float = global_config.DEFAULT_PARAMS['SphericalTank']['Ts'], 
                  render_mode=None, 
@@ -374,6 +417,7 @@ class SphericalTank(LinearVelocity):
         self.initial_state = None
         self.start_state_space = gym.spaces.Box(low = 1.0, high = 3.0, dtype = float)
         self.start_state_space.seed(seed = seed)
+        
 
     def reset(self, seed = None, options = None):
         _, info = super().reset(seed=seed, options=options)
@@ -386,13 +430,14 @@ class SphericalTank(LinearVelocity):
         self.initial_state = self.state
         if self.desired_trajectory is not None:
             self.desired_state = self.desired_trajectory[0].reshape(self.observation_space.shape)
+        self.des_history = []
         # self.desired_state = np.clip(self.desired_state, 0.2, 3.8)
         # print(f"Initial state {self.state} and desired state {self.desired_state}")
         return self.state, info
 
     def reward_fun(self, action):
         step_reward = - 5 * np.abs(self.state- self.desired_state)#/(self.observation_space.high - self.observation_space.low)
-        step_reward -= 100* self.state_space_violation() #+ 5*self.overshoot()
+        step_reward -= 500* self.state_space_violation() #+ 5*self.overshoot()
         
         # Action penalty
         step_reward -= 0.03 * (0.5 - action/self.action_space.high)**2
@@ -423,6 +468,7 @@ class SphericalTank(LinearVelocity):
         if self.desired_trajectory is not None:
             # print(f"Time step {self.timestep} and desired trajectory {len(self.desired_trajectory)}")
             self.desired_state = self.desired_trajectory[self.timestep].reshape(self.observation_space.shape)
+        self.des_history.append(self.desired_state)
         return super().step(action)
     
     def overshoot(self):

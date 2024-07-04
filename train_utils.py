@@ -52,12 +52,14 @@ def train_default_sac(core_env : gym.Env = None,
                       save : bool = True, 
                       observation_type : str = 'state',
                       randomise_setpoint : bool = False,
+                      rescale_action: bool = True,
+                      rescale_observation : bool = True,
                       total_timesteps : int = None):
 
     if core_env is None:
         core_env = init_core_env(env_type, desired_state, seed) 
 
-    core_env = init_wrappers(core_env, observation_type, randomise_setpoint)
+    core_env = init_wrappers(core_env, observation_type, randomise_setpoint, rescale_action, rescale_observation)
     env = core_env
 
     if agent_type == 'sac':
@@ -105,12 +107,14 @@ def train_default_augmented_sac(core_env : gym.Env = None,
                                 observation_type : str = 'state', 
                                 randomise_setpoint : bool = False,
                                 policy_kwargs : dict = None, 
-                                total_timesteps : int = None):
+                                total_timesteps : int = None,
+                                rescale_action: bool = True,
+                                rescale_observation : bool = True,):
     # Initialise the environment
     if core_env is None:
         core_env = init_core_env(env_type, desired_state, seed)
 
-    core_env = init_wrappers(core_env, observation_type, randomise_setpoint)
+    core_env = init_wrappers(core_env, observation_type, randomise_setpoint, rescale_action, rescale_observation)
     # Initial delay
     if init_delay is None or init_delay > global_config.MAX_DELAY: 
         init_delay = np.random.randint(0, global_config.MAX_DELAY)
@@ -193,15 +197,21 @@ def train_default_delayed_sac(core_env : gym.Env = None,
                       n_episodes : int = 100, 
                       ent_coef : float = 0.5, 
                       seed : int = None, 
-                      save : bool = True):
+                      save : bool = True, 
+                      observation_type : str = 'state',
+                      randomise_setpoint : bool = False,
+                      rescale_action: bool = True,
+                      rescale_observation : bool = True):
 
     if core_env is None:
         core_env = init_core_env(env_type, desired_state, seed) 
 
+    core_env = init_wrappers(core_env, observation_type, randomise_setpoint, rescale_action, rescale_observation)
+
     if init_delay is None or init_delay > global_config.MAX_DELAY: 
         init_delay = np.random.randint(0, global_config.MAX_DELAY)
 
-    env = DelayAction(RescaleAction(core_env), delay = init_delay, random_delay=False, return_queue = True)
+    env = DelayAction(core_env, delay = init_delay, random_delay=False, return_queue = True)
 
     if agent_type == 'delayedsac':
         model = DelayedSAC(policy='MlpPolicy', env=env, verbose=1, ent_coef=ent_coef, delay = init_delay)
@@ -209,11 +219,11 @@ def train_default_delayed_sac(core_env : gym.Env = None,
         raise ValueError("Invalid agent type")
     
     today = datetime.date.today().strftime("%m%d")
-    model_dir = f"{global_config.MODELS_PATH}/{core_env.__class__.__name__}/Desired{desired_state}/{agent_type}"
-    log_dir = f"{global_config.LOG_PATH}/{core_env.__class__.__name__}/{today}/Desired{desired_state}/{agent_type}"
+    model_dir = f"{global_config.MODELS_PATH}/{env.unwrapped.__class__.__name__}/Desired{desired_state}/{agent_type}"
+    log_dir = f"{global_config.LOG_PATH}/{env.unwrapped.__class__.__name__}/{today}/Desired{desired_state}/{agent_type}"
     new_logger = configure(log_dir, ["stdout", "csv"])
     model.set_logger(new_logger)
-    model.learn(total_timesteps = n_episodes * global_config.DEFAULT_PARAMS[core_env.__class__.__name__]['max_episode_len'])
+    model.learn(total_timesteps = n_episodes * global_config.DEFAULT_PARAMS[env.unwrapped.__class__.__name__]['max_episode_len'])
     if save:
         model.save(model_dir)
     return model, core_env

@@ -183,7 +183,7 @@ class IterativeEstimator():
         self.last_dist = np.ones(max_delay + 1) / (max_delay + 1)    
         self.useful_axes = useful_axes
 
-    def update_errors(self, env, env_model, state, new_state, action_queue = None): 
+    def update_errors(self, env_model, state, new_state, action_queue = None): 
         """
         Function to update the model errors with the new state
         :param env: Environment, delayed real process, can be augmented
@@ -193,34 +193,41 @@ class IterativeEstimator():
         :param new_state: The true new state of the environment
         """
         # If augmented environment
-        if env.observation_space.shape[0] > env_model.observation_space.shape[0]: 
-            action_queue = np.concatenate([state[env_model.observation_space.shape[0]:], new_state[-env.action_space.shape[0]:]])
+        if state.shape[0] > env_model.observation_space.shape[0]: 
+            action_queue = np.concatenate([state[env_model.observation_space.shape[0]:], new_state[-env_model.action_space.shape[0]:]])
             state = state[:env_model.observation_space.shape[0]]
             new_state = new_state[:env_model.observation_space.shape[0]]
-            # print(f"Env model ")
-            # print(f"New state was {new_state} and action queue was {action_queue} with shape {action_queue.shape}")
-        elif action_queue is None: 
-            action_queue = env.actions_queue
 
+        elif action_queue is None:
+            # print(f"Action queue is None, cannot update errors")
+            return
+        # print(f"Action queue is {action_queue}")
         # Reshape the action queue if needed for multi-dimensional actions
-        if len(action_queue.shape) == 1 and env.action_space.shape[0] > 1: 
-            action_queue = np.array(action_queue).reshape(action_queue.shape[0]//env.action_space.shape[0], env.action_space.shape[0])
+        if len(action_queue.shape) == 1 and env_model.action_space.shape[0] > 1: 
+            
+            action_queue = np.array(action_queue).reshape(action_queue.shape[0]//env_model.action_space.shape[0], env_model.action_space.shape[0])
 
         new_errors = []
         for delay in range(0, self.max_delay+1): 
             # Predict the next state from delayed action
+            # Get old state 
+    
             pred_state = predict_next_state(env_model=env_model, cur_state=state, action=action_queue[len(action_queue) - delay - 1])
+            new_pred_state = env_model.state
+            env_model.reset()
+            env_model.set_state(new_state)
+            new_true_state = env_model.state
+            # print(f"Pred state {pred_state} from {state}")
             # Append the error
-            new_errors.append(np.sqrt(np.square(new_state - pred_state)))
-
+            new_errors.append(np.sqrt(np.square(new_true_state - new_pred_state)))
+        # print(f"New errors min {np.argmin(new_errors, axis = 0)} are {new_errors}")
         # Update the model errors
         # print(f"Updating errors from {self.model_errors} with shape {self.model_errors.shape}")
         self.model_errors = self.model_errors * self.decay +  np.array(new_errors).reshape(self.model_errors.shape)
 
-    def get_predicted_delay(self, env): 
+    def get_predicted_delay(self): 
         """
         Function to get the predicted delay
-        :param env: Environment, delayed real process
         """
         probs = self.get_probs()
         # return np.random.choice(range(self.max_delay+1), p = probs)

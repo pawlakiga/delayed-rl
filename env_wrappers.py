@@ -277,6 +277,7 @@ class ObserveSetpointError(gym.Wrapper):
         return np.concatenate([self.unwrapped.desired_state , self.error]), reward, terminated, truncated, info
     
     def set_state(self, observation):
+        observation = observation.reshape(self.observation_space.shape)
         self.unwrapped.state = observation[:self.unwrapped.observation_space.shape[0]] - observation[self.unwrapped.observation_space.shape[0]:]
         self.unwrapped.desired_state = observation[:self.unwrapped.observation_space.shape[0]]
 
@@ -331,7 +332,8 @@ class VariableActionDelay(gym.Wrapper) :
                  max_delay : int, 
                  init_delay : int = 0, 
                  delay_type : str = 'wear', 
-                 update_freq : int = 200):
+                 update_freq : int = 200,
+                 keep_trajectory : bool = False):
         
         super().__init__(env)
         self.max_delay = max_delay
@@ -342,6 +344,7 @@ class VariableActionDelay(gym.Wrapper) :
             print(f"Invalid variable delay type {delay_type}, setting to constant")
         self.update_freq = update_freq
         self.ep_delay_history = []
+        self.keep_trajectory = keep_trajectory
 
     def step(self, action) : 
         queue = deepcopy(self.actions_queue[-int(self.current_delay):])
@@ -362,14 +365,21 @@ class VariableActionDelay(gym.Wrapper) :
         scaled = scale_range(np.zeros(self.action_space.shape), self.unwrapped.action_space.low, self.unwrapped.action_space.high, self.action_space.low, self.action_space.high)
         self.actions_queue = [np.ones(self.action_space.shape)*scaled  for _ in range(self.max_delay)] 
         self.current_delay = self.init_delay
-        self.ep_delay_history = []
+        if not self.keep_trajectory :
+            self.ep_delay_history = []
+        
         return self.env.reset(seed = seed)  
     
     def update_current_delay(self): 
+        if self.keep_trajectory and len(self.ep_delay_history) > self.unwrapped.timestep:
+            # print(f"Len delay history {len(self.ep_delay_history)} and timestep is {self.unwrapped.timestep}")
+            self.current_delay = self.ep_delay_history[self.unwrapped.timestep]
+            return
+        
         if self.unwrapped.timestep == 0:
             return
         if self.delay_type == 'external' :
-            if self.unwrapped.timestep  % self.update_freq == 0 :
+            if self.unwrapped.timestep % self.update_freq == 0 :
                 self.current_delay = np.random.choice(range(0,self.max_delay +1))
         elif self.delay_type == 'wear' :
             if self.unwrapped.timestep  % self.update_freq == 0 :

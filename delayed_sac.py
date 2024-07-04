@@ -64,8 +64,6 @@ class DelayedSAC(SAC):
                 _init_setup_model: bool = True,
                 delay : int = 0):
         
-        
-
         super().__init__(policy, 
                          env, 
                          learning_rate, 
@@ -160,9 +158,9 @@ class DelayedSAC(SAC):
         if self._vec_normalize_env is not None:
             self._last_original_obs = new_obs_
 
-
     def predict(self, state, deterministic = False): 
-        pred_state = predict_state(self.env_model, state, self.original_env.actions_queue, delay = self.delay, timestep=self.original_env.timestep)
+        # print(f"Predicting from {state} and queue {self.original_env.actions_queue}")
+        pred_state = predict_state(self.env_model, state, self.original_env.actions_queue, delay = self.delay, timestep=0)
         # print(f"Predicted state {pred_state} from {state} and queue {self.original_env.actions_queue}")
         pred_state.reshape(1, self.env.observation_space.shape[0])
         return super().predict(np.array(pred_state), deterministic = deterministic)
